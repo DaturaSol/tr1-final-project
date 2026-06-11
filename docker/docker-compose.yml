@@ -1,11 +1,11 @@
 # ./docker/docker-compose.yml
 name: "tr1-190042656-container"
 
-node-common-setup: &common-setup
+x-common-setup: &common-setup
   build:
     context: ..
     dockerfile: docker/Dockerfile.node
-  enviroment:
+  environment:
     PYTHONUNBUFFERED: "1"
   tty: true
   stdin_open: true
