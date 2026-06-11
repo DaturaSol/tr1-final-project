@@ -1,0 +1,25 @@
+# ./config.toml
+[container.dev]
+name = "dev_node"
+port = 5000
+script_path = "nodes/dev/main.py"
+
+[container.tx]
+name = "tx_node"
+port = 5001
+script_path = "nodes/tx/main.py"
+
+[container.channel]
+name = "channel_node"
+port = 5002
+script_path = "nodes/channel/main.py"
+
+[container.rx]
+name = "rx_node"
+port = 5003
+script_path = "nodes/rx/main.py"
+
+[socket]
+address = "0.0.0.0"
+buffer_size = 1024
+encoding = "utf-8"

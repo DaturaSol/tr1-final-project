@@ -1,0 +1,93 @@
+// ./.vscode/settings.json
+{
+    // UI & Remote Settings
+    "workbench.colorTheme": "Dark Modern",
+    "remote.autoForwardPortsSource": "hybrid",
+    // Python General & Testing
+    "python.defaultInterpreterPath": "/workspace/.venv/bin/python",
+    "python.terminal.activateEnvInCurrentTerminal": true,
+    "python.testing.pytestEnabled": true,
+    // Formatting & Linting (Powered by Ruff)
+    "editor.formatOnSave": true,
+    "[python]": {
+        "editor.defaultFormatter": "charliermarsh.ruff",
+        "editor.codeActionsOnSave": {
+            "source.organizeImports.ruff": "explicit",
+            "source.fixAll.ruff": "explicit"
+        }
+    },
+    // Pylance (Language Server focus: Type Checking & Hints)
+    "python.languageServer": "Pylance",
+    "python.analysis.typeCheckingMode": "standard",
+    "python.analysis.diagnosticMode": "openFilesOnly",
+    // Turn off Pylance Linting for unused items (Let Ruff handle this instantly)
+    "python.analysis.reportUnusedParameter": "none",
+    "python.analysis.reportUnusedFunction": "none",
+    "python.analysis.reportUnusedVariable": "none",
+    "python.analysis.reportUnusedImport": "none",
+    "python.analysis.reportUnusedClass": "none",
+    // Completions & Typing
+    "python.analysis.persistAllIndices": true,
+    "python.analysis.autoFormatStrings": true,
+    "python.analysis.autoImportCompletions": true,
+    "python.analysis.completeFunctionParens": false,
+    "python.analysis.displayEnglishDiagnostics": true,
+    "python.analysis.disableTaggedHints": true,
+    "python.analysis.enableTroubleshootMissingImports": true,
+    "python.analysis.generateWithTypeAnnotation": true,
+    "python.analysis.showOnlyDirectDependenciesInAutoImport": true,
+    // Inlay Hints
+    "python.analysis.inlayHints.callArgumentNames": "partial",
+    "python.analysis.inlayHints.functionReturnTypes": true,
+    "python.analysis.inlayHints.pytestParameters": true,
+    // Strict Inference
+    "python.analysis.typeEvaluation.strictDictionaryInference": true,
+    "python.analysis.typeEvaluation.strictListInference": true,
+    "python.analysis.typeEvaluation.strictSetInference": true,
+    // Indexing & Performance Exclusions
+    "python.analysis.indexing": true,
+    "python.analysis.indexing.followSymlinkedFolders": false,
+    "python.analysis.exclude": [
+        "**/.*",
+        "**/node_modules",
+        "**/.venv",
+        "**/__pycache__",
+        "**/assets"
+    ],
+    "files.watcherExclude": {
+        "**/data/**": true,
+        "**/.venv/**": true,
+        "**/__pycache__/**": true,
+        "**/.git/**": true,
+        "**/out*": true,
+        "**/assets*": true
+    },
+    "search.exclude": {
+        "**/data": true,
+        "**/.venv": true,
+        "**/out*": true,
+        "**/assets*": true
+    },
+    // Ruff: Markdown Support
+    "ruff.format.preview": true,
+    "[markdown]": {
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "charliermarsh.ruff"
+    },
+    // Ruff: Jupyter Notebook Support
+    "notebook.formatOnSave.enabled": true,
+    "notebook.codeActionsOnSave": {
+        "notebook.source.fixAll": "explicit",
+        "notebook.source.organizeImports": "explicit"
+    },
+    // Environment Managers
+    // "python-envs.defaultEnvManager": "ms-python.python:uv",
+    // "python-envs.defaultPackageManager": "ms-python.python:uv",
+    // Mypy Type Checker (configured separately from Pylance)
+    "mypy-type-checker.importStrategy": "fromEnvironment",
+    "mypy-type-checker.preferDaemon": true,
+    "mypy-type-checker.reportingScope": "file",
+    "mypy-type-checker.args": [
+        "--config-file=pyproject.toml"
+    ]
+}

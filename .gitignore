@@ -1,0 +1,16 @@
+# ./.gitignore
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.ipynb_checkpoints/
+.coverage
+htmlcov/
+.env
+*.log
+
+*claude*
+*CLAUDE*

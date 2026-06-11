@@ -1,0 +1,81 @@
+# ./docker/docker-compose.yml
+name: "tr1-190042656-container"
+
+node-common-setup: &common-setup
+  build:
+    context: ..
+    dockerfile: docker/Dockerfile.node
+  enviroment:
+    PYTHONUNBUFFERED: "1"
+  tty: true
+  stdin_open: true
+  command: sleep infinity
+  networks:
+    - network_tr1
+
+services:
+  dev:
+    container_name: dev_node
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.dev
+    environment:
+      PYTHONUNBUFFERED: "1"
+    tty: true
+    stdin_open: true
+    command: sleep infinity
+    networks:
+      - network_tr1
+    volumes:
+      - venv_data:/workspace/.venv # common enviroment
+      - ..:/workspace:cached # Sees all the workspace
+      - /var/run/docker.sock:/var/run/docker.sock
+      - claude_config:/root/.claude
+    ports:
+      - "8501:8501" # streamlit
+      # dev, tx, ch, rx ports dont need to be open, but for debug is good
+      - "5000:5000" # dev port
+      - "5001:5001" # tx port
+      - "5002:5002" # ch port
+      - "5003:5003" # rx port
+
+  tx:
+    container_name: tx_node
+    <<: *common-setup
+    volumes:
+      - venv_data:/workspace/.venv # common enviroment
+      - ../pyproject.toml:/workspace/pyproject.toml # Common
+      - ../uv.lock:/workspace/uv.lock # common 
+      - ../config.toml:/workspace/config.toml # common
+      - ../src/layer_manager:/workspace/src/layer_manager:cached # common 
+      - ../nodes/tx:/workspace/nodes/tx:cached # Only see itself
+
+  ch:
+    container_name: ch_node
+    <<: *common-setup
+    volumes:
+      - venv_data:/workspace/.venv # common enviroment
+      - ../pyproject.toml:/workspace/pyproject.toml # Common
+      - ../uv.lock:/workspace/uv.lock # common 
+      - ../config.toml:/workspace/config.toml # common
+      - ../src/layer_manager:/workspace/src/layer_manager:cached # common 
+      - ../nodes/ch:/workspace/nodes/ch:cached # Only see itself
+
+  rx:
+    container_name: rx_node
+    <<: *common-setup
+    volumes:
+      - venv_data:/workspace/.venv # common enviroment
+      - ../pyproject.toml:/workspace/pyproject.toml # Common
+      - ../uv.lock:/workspace/uv.lock # common 
+      - ../config.toml:/workspace/config.toml # common
+      - ../src/layer_manager:/workspace/src/layer_manager:cached # common 
+      - ../nodes/rx:/workspace/nodes/rx:cached # Only see itself
+
+networks:
+  network_tr1:
+    driver: bridge
+
+volumes:
+  venv_data:
+  claude_config:
