@@ -2,17 +2,17 @@
 [container.dev]
 name = "dev_node"
 port = 5000
-script_path = "nodes/dev/main.py"
+script_path = "app/app.py"
 
 [container.tx]
 name = "tx_node"
 port = 5001
 script_path = "nodes/tx/main.py"
 
-[container.channel]
-name = "channel_node"
+[container.ch]
+name = "ch_node"
 port = 5002
-script_path = "nodes/channel/main.py"
+script_path = "nodes/ch/main.py"
 
 [container.rx]
 name = "rx_node"
