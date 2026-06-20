@@ -1,6 +1,6 @@
 // ./.devcontainer/devcontainer.json
 {
-    "name": "tb-floorplan",
+    "name": "tr-final",
     "dockerComposeFile": [
         "../docker/docker-compose.yml"
     ],
