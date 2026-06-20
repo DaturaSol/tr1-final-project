@@ -34,10 +34,10 @@ services:
     ports:
       - "8501:8501" # streamlit
       # dev, tx, ch, rx ports dont need to be open, but for debug is good
-      - "5000:5000" # dev port
-      - "5001:5001" # tx port
-      - "5002:5002" # ch port
-      - "5003:5003" # rx port
+      - "5100:5000" # dev port (remapped from 5000 due to macOS AirPlay)
+      - "5101:5001" # tx port
+      - "5102:5002" # ch port
+      - "5103:5003" # rx port
 
   tx:
     container_name: tx_node
