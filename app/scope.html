@@ -1,0 +1,327 @@
+<!-- ./app/scope.html -->
+<!-- Client-side multi-trace oscilloscope. Streamlit injects a JSON payload in
+     place of __PAYLOAD__ (see app.py): a list of traces, each either a digital
+     bit sequence (drawn as a square wave) or an analog signal (drawn as a
+     line). Every panel shares one fractional viewport, so the stages stay
+     proportionally aligned and scroll together. All animation runs in the
+     browser via requestAnimationFrame -- no server round-trips per frame. -->
+<div id="scope-root">
+  <div class="bar">
+    <button id="play">⏸ Pause</button>
+    <label>Speed
+      <input id="speed" type="range" min="2" max="100" value="20" step="2">
+    </label>
+    <label>Window
+      <input id="win" type="range" min="2" max="100" value="__WIN0__" step="2">
+      <span id="winv"></span>%
+    </label>
+    <span id="pos" class="pos"></span>
+  </div>
+  <canvas id="cv"></canvas>
+</div>
+
+<style>
+  html, body { margin: 0; background: #0e1117; }
+  #scope-root {
+    width: 100%; padding: 8px; box-sizing: border-box;
+    font-family: ui-sans-serif, system-ui, sans-serif;
+  }
+  #scope-root .bar {
+    display: flex; gap: 20px; align-items: center; flex-wrap: wrap;
+    margin-bottom: 8px; font-size: 13px; color: #c5c8ce;
+  }
+  #scope-root button {
+    cursor: pointer; padding: 4px 14px; border: 1px solid #3a3f4b;
+    border-radius: 6px; background: #1c1f27; font-size: 13px; color: #e6e6e6;
+  }
+  #scope-root button:hover { background: #262a33; }
+  #scope-root input[type=range] {
+    vertical-align: middle; accent-color: #5c9dff;
+  }
+  #scope-root canvas {
+    width: 100%; display: block; border: 1px solid #2a2e39;
+    border-radius: 8px; background: #0e1117;
+  }
+  #scope-root .pos {
+    margin-left: auto; color: #6b7280; font-variant-numeric: tabular-nums;
+  }
+</style>
+
+<script>
+(function () {
+  const P = __PAYLOAD__;
+  const traces = P.traces;
+  const H = __HEIGHT__;
+  const padL = 54; // left margin for the value axis
+
+  // Per-trace vertical scale: digital is 0..1; analog spans +/- its peak.
+  traces.forEach(function (t) {
+    t.len = t.data.length;
+    if (t.digital) {
+      t.lo = 0;
+      t.hi = 1;
+    } else {
+      let peak = 0;
+      for (let i = 0; i < t.data.length; i++) {
+        const a = Math.abs(t.data[i]);
+        if (a > peak) peak = a;
+      }
+      peak = peak > 0 ? peak * 1.1 : 1;
+      t.lo = -peak;
+      t.hi = peak;
+    }
+  });
+
+  const cv = document.getElementById("cv");
+  const ctx = cv.getContext("2d");
+  const playBtn = document.getElementById("play");
+  const speedEl = document.getElementById("speed");
+  const winEl = document.getElementById("win");
+  const winv = document.getElementById("winv");
+  const posEl = document.getElementById("pos");
+
+  // Persist the controls + scroll position across Streamlit reruns (changing
+  // framing or any setting rebuilds this iframe). Wrapped in try/catch so it
+  // degrades gracefully if a sandbox blocks storage.
+  function load(key, fallback) {
+    try {
+      const v = localStorage.getItem(key);
+      return v === null ? fallback : v;
+    } catch (e) { return fallback; }
+  }
+  function save(key, value) {
+    try { localStorage.setItem(key, value); } catch (e) {}
+  }
+
+  speedEl.value = load("tr1_mscope_speed", speedEl.value);
+  winEl.value = load("tr1_mscope_win", winEl.value);
+  let playing = load("tr1_mscope_playing", "1") === "1";
+  let fracOffset = parseFloat(load("tr1_mscope_offset", "0")) || 0;
+  fracOffset = ((fracOffset % 1) + 1) % 1; // left edge of viewport, in [0, 1)
+  let last = null;
+  let saveTick = 0;
+  let dragging = false;
+  playBtn.textContent = playing ? "⏸ Pause" : "▶ Play";
+
+  function resize() {
+    const dpr = window.devicePixelRatio || 1;
+    const w = cv.clientWidth;
+    cv.width = Math.max(1, Math.floor(w * dpr));
+    cv.height = Math.floor(H * dpr);
+    cv.style.height = H + "px";
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  window.addEventListener("resize", resize);
+
+  function fracWidth() {
+    return Math.max(2, parseInt(winEl.value, 10)) / 100;
+  }
+
+  function fmt(v) {
+    if (Math.abs(v) < 1e-9) return "0";
+    return (Math.round(v * 100) / 100).toString();
+  }
+
+  function drawPanel(t, top, panelH, W, fw) {
+    const plotTop = top + 16;
+    const plotH = panelH - 22;
+    const plotW = W - padL;
+    const yOf = function (v) {
+      return plotTop + plotH * (1 - (v - t.lo) / (t.hi - t.lo));
+    };
+
+    // Value axis: 0 line plus the panel's extremes.
+    const levels = t.digital ? [0, 1] : [t.lo, 0, t.hi];
+    ctx.font = "11px ui-sans-serif, system-ui, sans-serif";
+    ctx.textAlign = "right";
+    ctx.textBaseline = "middle";
+    for (let li = 0; li < levels.length; li++) {
+      const y = yOf(levels[li]);
+      ctx.strokeStyle = levels[li] === 0 ? "#3c4250" : "#20242e";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(padL, y);
+      ctx.lineTo(W, y);
+      ctx.stroke();
+      ctx.fillStyle = "#8b909a";
+      ctx.fillText(fmt(levels[li]), padL - 6, y);
+    }
+
+    // Faint byte grid (every 8 bits) on digital traces, only when few enough
+    // bytes are visible to stay readable -- so bytes are easy to count.
+    if (t.digital && t.bytegrid && t.len > 0 && fw * t.len <= 640) {
+      ctx.strokeStyle = "#ffffff12";
+      ctx.lineWidth = 1;
+      for (let bit = 0; bit < t.len; bit += 8) {
+        const mf = bit / t.len;
+        for (let k = Math.floor(fracOffset); k <= fracOffset + fw; k++) {
+          const wf = mf + k;
+          if (wf < fracOffset || wf >= fracOffset + fw) continue;
+          const x = padL + ((wf - fracOffset) / fw) * plotW;
+          ctx.beginPath();
+          ctx.moveTo(x, plotTop);
+          ctx.lineTo(x, plotTop + plotH);
+          ctx.stroke();
+        }
+      }
+    }
+
+    // Structural regions (framing header/flags, EDC, Hamming parity) drawn as
+    // labelled translucent bands behind the trace. Guard on t.len: an empty
+    // trace (e.g. an undecodable receive yields no frames) would make
+    // reg.from / t.len == Infinity and spin the band loop forever.
+    if (t.regions && t.len > 0) {
+      for (let ri = 0; ri < t.regions.length; ri++) {
+        const reg = t.regions[ri];
+        const a = reg.from / t.len;
+        const b = reg.to / t.len;
+        for (let k = Math.floor(fracOffset - b); k <= fracOffset + fw - a; k++) {
+          const fa = a + k;
+          const fb = b + k;
+          if (fb <= fracOffset || fa >= fracOffset + fw) continue;
+          const lo = Math.max(fa, fracOffset);
+          const hi = Math.min(fb, fracOffset + fw);
+          const x0 = padL + ((lo - fracOffset) / fw) * plotW;
+          const x1 = padL + ((hi - fracOffset) / fw) * plotW;
+          ctx.fillStyle = reg.color + "33"; // ~20% alpha band
+          ctx.fillRect(x0, plotTop, Math.max(1, x1 - x0), plotH);
+          if (reg.label) {
+            ctx.fillStyle = reg.color;
+            ctx.font = "9px ui-sans-serif, system-ui, sans-serif";
+            ctx.textAlign = "left";
+            ctx.textBaseline = "top";
+            ctx.fillText(reg.label, x0 + 2, plotTop + 2);
+          }
+        }
+      }
+    }
+
+    // The trace: square wave for digital (step held per bit), line for analog.
+    if (t.len > 0) {
+      ctx.strokeStyle = t.color;
+      ctx.lineWidth = t.digital ? 1.8 : 1.4;
+      ctx.lineJoin = "miter";
+      ctx.beginPath();
+      let started = false;
+      let prevIdx = -1;
+      for (let px = 0; px <= plotW; px++) {
+        const frac = fracOffset + (px / plotW) * fw;
+        let idx = Math.floor(frac * t.len) % t.len;
+        if (idx < 0) idx += t.len;
+        if (idx < prevIdx) started = false; // lift the pen at the loop seam
+        prevIdx = idx;
+        const y = yOf(t.data[idx]);
+        const x = padL + px;
+        if (!started) {
+          ctx.moveTo(x, y);
+          started = true;
+        } else {
+          ctx.lineTo(x, y);
+        }
+      }
+      ctx.stroke();
+    }
+
+    // Panel label (and a hint of its length / kind).
+    ctx.fillStyle = "#e6e6e6";
+    ctx.font = "12px ui-sans-serif, system-ui, sans-serif";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "alphabetic";
+    const kind = t.digital ? t.len + " bits" : t.len + " samples";
+    ctx.fillText(t.label + "  (" + kind + ")", padL + 4, top + 12);
+  }
+
+  function draw() {
+    const W = cv.clientWidth;
+    const n = traces.length;
+    const gap = 12;
+    const panelH = (H - (n - 1) * gap) / n;
+    const fw = fracWidth();
+    ctx.clearRect(0, 0, W, H);
+    winv.textContent = winEl.value;
+    posEl.textContent = "position " + Math.round(fracOffset * 100) + "%";
+    for (let ti = 0; ti < n; ti++) {
+      drawPanel(traces[ti], ti * (panelH + gap), panelH, W, fw);
+    }
+
+    // Message start/end delimiter: every trace wraps at the message boundary
+    // (an integer fraction), so mark each boundary visible in the window with
+    // a dashed full-height line.
+    ctx.save();
+    ctx.strokeStyle = "#ff6b81";
+    ctx.fillStyle = "#ff6b81";
+    ctx.setLineDash([5, 4]);
+    ctx.lineWidth = 1.2;
+    ctx.font = "10px ui-sans-serif, system-ui, sans-serif";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    const plotW = W - padL;
+    for (let b = Math.ceil(fracOffset); b < fracOffset + fw; b += 1) {
+      const x = padL + ((b - fracOffset) / fw) * plotW;
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, H);
+      ctx.stroke();
+      ctx.fillText("msg start / end", x + 4, 2);
+    }
+    ctx.restore();
+  }
+
+  function frame(ts) {
+    if (last === null) last = ts;
+    const dt = (ts - last) / 1000;
+    last = ts;
+    if (playing && !dragging) {
+      const speed = parseInt(speedEl.value, 10) / 100; // fraction per second
+      fracOffset = (fracOffset + speed * dt) % 1;
+      if (++saveTick >= 30) { // persist scroll position ~twice a second
+        saveTick = 0;
+        save("tr1_mscope_offset", fracOffset.toFixed(4));
+      }
+    }
+    draw();
+    requestAnimationFrame(frame);
+  }
+
+  playBtn.onclick = function () {
+    playing = !playing;
+    playBtn.textContent = playing ? "⏸ Pause" : "▶ Play";
+    save("tr1_mscope_playing", playing ? "1" : "0");
+  };
+  speedEl.oninput = function () {
+    save("tr1_mscope_speed", speedEl.value);
+  };
+  winEl.oninput = function () {
+    save("tr1_mscope_win", winEl.value);
+    draw();
+  };
+
+  // Click-drag to pan across the message (works paused or playing).
+  let dragStartX = 0;
+  let dragStartFrac = 0;
+  cv.style.cursor = "grab";
+  cv.addEventListener("mousedown", function (event) {
+    dragging = true;
+    dragStartX = event.clientX;
+    dragStartFrac = fracOffset;
+    cv.style.cursor = "grabbing";
+  });
+  window.addEventListener("mousemove", function (event) {
+    if (!dragging) return;
+    const plotW = Math.max(1, cv.clientWidth - padL);
+    const moved = (event.clientX - dragStartX) / plotW; // drag right -> back
+    fracOffset = ((dragStartFrac - moved * fracWidth()) % 1 + 1) % 1;
+    save("tr1_mscope_offset", fracOffset.toFixed(4));
+    draw();
+  });
+  window.addEventListener("mouseup", function () {
+    if (dragging) {
+      dragging = false;
+      cv.style.cursor = "grab";
+    }
+  });
+
+  resize();
+  requestAnimationFrame(frame);
+})();
+</script>

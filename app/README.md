@@ -15,35 +15,39 @@ uv run streamlit run app/app.py
 It serves on <http://localhost:8501> (the port is published by the `dev`
 container in `docker/docker-compose.yml`).
 
-## Current scope
+## What it shows
 
-Physical layer only, for now:
+The **full link + physical pipeline** end to end, driven by the shared
+`layer_manager.pipeline`:
 
-- Type a **message** and choose a **modulation** (NRZ-Polar, Manchester,
-  Bipolar, ASK, FSK, QPSK, 16-QAM).
-- Tune amplitude, samples per symbol, carrier frequency, sample rate, and the
-  channel **noise sigma**.
-- Watch the waveform scroll like an **oscilloscope** (Play to animate, or drag
-  the position slider to scrub).
-- See whether the receiver recovers the message after the noisy channel.
+- Configure every layer in the sidebar — **link** (max frame size, framing,
+  detection, correction, checksum block), **physical** (baseband line code,
+  carrier, amplitude, samples/symbol, frequency, sample rate), and the channel
+  **noise sigma**.
+- Watch the framed-bit reference, the modulated signal, and the received (noisy)
+  signal scroll like an **oscilloscope**, full-width and stacked on a single
+  shared time axis (gridlines on the symbol boundaries, a per-panel **volts
+  axis**). The animation is a self-contained HTML canvas (`scope.html`) that
+  runs **entirely in the browser** — no per-frame server round-trips — with
+  **Play/Pause**, **Speed**, and **Window** controls.
+- Inspect the **transmit stages** (chunking into frames, per-frame protected
+  sizes, the framed bit stream) and the **receive verdict** (a per-frame table
+  of detector ✓/✗ and bits corrected), plus whether the message round-tripped.
 
-> Tip: keep *carrier cycles per symbol* a whole number (shown in the sidebar)
-> so the carrier demodulators separate cleanly.
+> Tips: keep *carrier cycles per symbol* a whole number (shown in the sidebar)
+> so the carrier demodulators separate cleanly; pair parity/Hamming with
+> bit-stuffing (char-count and byte-stuffing need byte-aligned frames).
 
 ## Layout
 
 | File | Responsibility |
 |------|----------------|
-| `app.py` | Streamlit UI: sidebar controls, the live oscilloscope, page layout. |
-| `simulation.py` | **Streamlit-free** logic: build a modulator from the config, run text → bits → modulate → channel → demodulate. Unit-tested in `tests/test_app_simulation.py`. |
-| `pages/` | Reserved for future multipage views (link layer, end-to-end over the nodes). |
+| `app.py` | Streamlit UI: full config sidebar, page layout, the canvas oscilloscope, and the transmit/receive panels. |
+| `scope.html` | Self-contained HTML/canvas/JS oscilloscope. Streamlit injects the signals as JSON; all animation runs client-side. |
+| `simulation.py` | **Streamlit-free** logic: `run_pipeline` wraps `layer_manager.pipeline` (transmit → channel → receive) and prepares the canvas traces. Unit-tested in `tests/test_app_simulation.py`. |
+| `pages/` | Reserved for future multipage views. |
 
 The UI / logic split keeps `simulation.py` testable and reusable, and means the
-heavy lifting lives in pure functions rather than in the Streamlit script.
-
-## Planned next
-
-- Stack the full pipeline per frame (bits → baseband → carrier → noisy →
-  recovered) once the data-link layer lands.
-- An "end-to-end over the nodes" panel showing the result after the real
-  `tx → ch → rx` socket round-trip.
+heavy lifting lives in pure functions rather than in the Streamlit script. The
+actual layer orchestration lives in `layer_manager.pipeline` so the GUI and the
+socket nodes share one implementation.

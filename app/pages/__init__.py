@@ -1,4 +1,4 @@
 # ./app/pages/__init__.py
-"""A"""
+"""Reserved for future multipage views (link layer, end-to-end nodes)."""
 
 __all__ = []

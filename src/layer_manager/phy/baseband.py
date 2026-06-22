@@ -36,10 +36,12 @@ class BasebandModulator(Modulator):
 
     def modulate(self, bits: Bits) -> Signal:
         """Return the line-coded samples for ``bits``."""
+        # NOTE: bits.shape is (n,).
         raise NotImplementedError
 
     def demodulate(self, signal: Signal) -> Bits:
         """Recover the bit sequence from ``signal``."""
+        # NOTE: signal.shape is (n * sps,).
         raise NotImplementedError
 
 
@@ -56,9 +58,13 @@ class NRZPolar(BasebandModulator):
             ``+V`` samples for 1s and ``-V`` samples for 0s.
         """
         # +V where the bit is True, -V where it is False.
-        levels = np.where(bits, self.amplitude, -self.amplitude)
+        levels = np.where(bits, self.amplitude, -self.amplitude)  # (n,)
         # Hold each level for the whole symbol duration.
-        signal: Signal = np.repeat(levels, self.samples_per_symbol)
+        # NOTE: np.repeat repeats each element straight after itself.
+        # Explicite notation to satisfy mypy.
+        signal: Signal = np.repeat(
+            levels, self.samples_per_symbol
+        )  # (n * sps,)
         return signal
 
     def demodulate(self, signal: Signal) -> Bits:
@@ -71,8 +77,11 @@ class NRZPolar(BasebandModulator):
             A 1 wherever the level is positive, a 0 otherwise.
         """
         # Level is constant across a symbol; one sample per bit suffices.
-        symbols = signal[:: self.samples_per_symbol]
-        return [bool(sample > 0) for sample in symbols]
+        # NOTE: The `::` notation takes every N-th element,
+        # starting with the first (index 0).
+        symbols = signal[:: self.samples_per_symbol]  # (n,)
+        bits: Bits = [bool(sample > 0) for sample in symbols]  # (n,)
+        return bits
 
 
 class Manchester(BasebandModulator):
@@ -95,10 +104,13 @@ class Manchester(BasebandModulator):
         """
         half = self.samples_per_symbol // 2
         # One symbol of clock, e.g. [F, F, T, T] for samples_per_symbol == 4.
-        one_symbol = [False] * half + [True] * (self.samples_per_symbol - half)
+        one_symbol = [False] * half + [True] * (
+            self.samples_per_symbol - half
+        )  # (sps,)
+        # NOTE: np.tile repeats the whole array, different than np.repeat.
         clock: npt.NDArray[np.bool_] = np.tile(
             np.array(one_symbol), symbol_count
-        )
+        )  # (symbol_count * sps,)
         return clock
 
     def modulate(self, bits: Bits) -> Signal:
@@ -111,10 +123,12 @@ class Manchester(BasebandModulator):
             A polar (+V/-V) signal with one transition per bit.
         """
         # Hold each bit for the whole symbol, then XOR with the half-bit clock.
-        bits_held = np.repeat(bits, self.samples_per_symbol)
-        high = np.bitwise_xor(bits_held, self._clock(len(bits)))
+        bits_held = np.repeat(bits, self.samples_per_symbol)  # (n * sps,)
+        high = np.bitwise_xor(bits_held, self._clock(len(bits)))  # (n * sps,)
         # High half -> +V, low half -> -V.
-        signal: Signal = np.where(high, self.amplitude, -self.amplitude)
+        signal: Signal = np.where(
+            high, self.amplitude, -self.amplitude
+        )  # (n * sps,)
         return signal
 
     def demodulate(self, signal: Signal) -> Bits:
@@ -128,12 +142,15 @@ class Manchester(BasebandModulator):
         """
         symbol_count = len(signal) // self.samples_per_symbol
         # Which samples sit in the high (+V) half of their bit.
-        high = signal > 0
-        # XOR is its own inverse, so this rebuilds the held bits.
-        bits_held = np.bitwise_xor(high, self._clock(symbol_count))
+        high = signal > 0  # (n * sps,)
+        # NOTE: XOR is its own inverse, so this rebuilds the held bits.
+        bits_held = np.bitwise_xor(
+            high, self._clock(symbol_count)
+        )  # (n * sps,)
         # Collapse each symbol back to a single bit.
-        symbols = bits_held[:: self.samples_per_symbol]
-        return [bool(bit) for bit in symbols]
+        symbols = bits_held[:: self.samples_per_symbol]  # (n,)
+        bits: Bits = [bool(bit) for bit in symbols]  # (n,)
+        return bits
 
 
 class Bipolar(BasebandModulator):
@@ -154,15 +171,18 @@ class Bipolar(BasebandModulator):
         Returns:
             A three-level (+V/0/-V) signal.
         """
-        bit_array = np.array(bits)
-        # Running count of marks (1s) up to and including each position.
-        mark_index = np.cumsum(bit_array)
-        # Odd marks -> +1, even marks -> -1 (parity, no (-1) ** k needed).
-        sign = np.where(mark_index % 2 == 1, 1.0, -1.0)
+        bit_array = np.array(bits)  # (n,)
+        # NOTE: np.cumsum (cumulative sum) also works for bolean arrays,
+        # treating True as 1 and False as 0.
+        mark_index = np.cumsum(bit_array)  # (n,)
+        # Odd  -> +1; Even -> -1.
+        sign = np.where(mark_index % 2 == 1, 1.0, -1.0)  # (n,)
         # 0 bits stay at 0 V; 1 bits take the alternating signed amplitude.
-        levels = np.where(bit_array, sign * self.amplitude, 0.0)
+        levels = np.where(bit_array, sign * self.amplitude, 0.0)  # (n,)
         # Hold each level for the whole symbol duration.
-        signal: Signal = np.repeat(levels, self.samples_per_symbol)
+        signal: Signal = np.repeat(
+            levels, self.samples_per_symbol
+        )  # (n * sps,)
         return signal
 
     def demodulate(self, signal: Signal) -> Bits:
@@ -175,6 +195,9 @@ class Bipolar(BasebandModulator):
             A 1 wherever a pulse is present (either polarity), a 0 otherwise.
         """
         # Level is constant across a symbol; one sample per bit suffices.
-        symbols = signal[:: self.samples_per_symbol]
+        symbols = signal[:: self.samples_per_symbol]  # (n,)
         # A mark sits near +/-V; a 0 near 0 V. Threshold the magnitude halfway.
-        return [bool(abs(sample) > self.amplitude / 2) for sample in symbols]
+        bits: Bits = [
+            bool(abs(sample) > self.amplitude / 2) for sample in symbols
+        ]  # (n,)
+        return bits

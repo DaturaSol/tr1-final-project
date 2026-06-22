@@ -91,7 +91,7 @@ class ErrorCorrector(Protocol):
         """Return ``data`` with correction (parity) bits interleaved."""
         ...
 
-    def decode(self, data: Bits) -> tuple[Bits, int]:
+    def decode(self, data: Bits) -> tuple[Bits, bool]:
         """Repair and strip the redundancy from a received block.
 
         Args:
@@ -99,8 +99,8 @@ class ErrorCorrector(Protocol):
 
         Returns:
             A tuple ``(payload, corrected)`` where ``payload`` is the
-            recovered data and ``corrected`` is the number of bit errors
-            that were fixed.
+            recovered data and ``corrected`` is ``True`` when a bit error was
+            located and repaired, ``False`` otherwise.
         """
         ...
 

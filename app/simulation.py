@@ -10,12 +10,17 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from layer_manager import factory
 from layer_manager.config import (
     CarrierModulation,
     DigitalModulation,
     SimulationConfig,
 )
+from layer_manager.factory import (
+    build_carrier_modulator,
+    build_channel,
+    build_digital_modulator,
+)
+from layer_manager.pipeline import RxResult, TxResult, receive, transmit
 from layer_manager.protocol import Modulator
 from layer_manager.types import Bits, Signal
 from layer_manager.utils import bits_to_text, text_to_bits
@@ -64,11 +69,11 @@ def build_modulator(scheme: str, config: SimulationConfig) -> Modulator:
         updated = config.model_copy(
             update={"digital_modulation": DIGITAL_SCHEMES[scheme]}
         )
-        return factory.build_digital_modulator(updated)
+        return build_digital_modulator(updated)
     updated = config.model_copy(
         update={"carrier_modulation": CARRIER_SCHEMES[scheme]}
     )
-    carrier = factory.build_carrier_modulator(updated)
+    carrier = build_carrier_modulator(updated)
     if carrier is None:  # pragma: no cover - scheme is always a real carrier
         raise ValueError(f"Unknown modulation scheme: {scheme}")
     return carrier
@@ -90,7 +95,7 @@ def run_modulation(
     modulator = build_modulator(scheme, config)
     bits = text_to_bits(text)
     clean = modulator.modulate(bits)
-    noisy = factory.build_channel(config).transmit(clean)
+    noisy = build_channel(config).transmit(clean)
     recovered_bits = modulator.demodulate(noisy)
     return ModulationResult(
         bits=bits,
@@ -119,6 +124,35 @@ def _unipolar(bits: Bits, amplitude: float, length: int) -> Signal:
 def _safe_text(bits: Bits) -> str:
     """Decode bits to text, tolerating the garbage a noisy channel yields."""
     try:
-        return bits_to_text(bits)
+        decoded: str = bits_to_text(bits)
     except (UnicodeDecodeError, ValueError):
         return "<undecodable>"
+    return decoded
+
+
+@dataclass
+class RunResult:
+    """A full link+physical run, with the signals the GUI plots."""
+
+    tx: TxResult
+    rx: RxResult
+    noisy: Signal
+    reference: Signal  # framed-bit reference, stretched to the signal length
+
+
+def run_pipeline(config: SimulationConfig, text: str) -> RunResult:
+    """Run the whole stack in-process: transmit, add channel noise, receive.
+
+    Args:
+        config: The simulation parameters (drives every layer).
+        text: The message to transmit.
+
+    Returns:
+        A :class:`RunResult` with the transmit/receive stages, the noisy signal,
+        and a bit-reference trace aligned to the modulated signal.
+    """
+    tx = transmit(config, text)
+    noisy = build_channel(config).transmit(tx.signal)
+    rx = receive(config, noisy)
+    reference = _unipolar(tx.framed, config.amplitude_v, tx.signal.size)
+    return RunResult(tx=tx, rx=rx, noisy=noisy, reference=reference)
