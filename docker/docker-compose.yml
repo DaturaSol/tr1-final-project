@@ -30,7 +30,6 @@ services:
       - venv_data:/workspace/.venv # common enviroment
       - ..:/workspace:cached # Sees all the workspace
       - /var/run/docker.sock:/var/run/docker.sock
-      - claude_config:/root/.claude
     ports:
       - "8501:8501" # streamlit
       # dev, tx, ch, rx ports dont need to be open, but for debug is good

@@ -76,7 +76,7 @@ _MAX_FRAMES_SHOWN = 64  # cap per-frame rows/lines so the DOM can't blow up
 def sidebar_config() -> tuple[str, SimulationConfig]:
     """Render every configuration control and return ``(message, config)``."""
     st.sidebar.header("Configuration")
-    message = st.sidebar.text_input("Message", value="Hi! TR1")
+    message = st.sidebar.text_input("Message", value="Hello I am in PAIN.")
 
     st.sidebar.subheader("Link layer")
     max_frame = st.sidebar.slider("Max frame size (bytes)", 1, 16, 8)
@@ -255,17 +255,23 @@ def _framed_regions(
         length = len(framer.frame([protected]))
         if config.framing is FramingType.CHAR_COUNT:
             regions.append({
-                "from": offset, "to": offset + 8,
-                "color": "#48d1cc", "label": "count",
+                "from": offset,
+                "to": offset + 8,
+                "color": "#48d1cc",
+                "label": "count",
             })
         else:
             regions.append({
-                "from": offset, "to": offset + 8,
-                "color": "#48d1cc", "label": "FLAG",
+                "from": offset,
+                "to": offset + 8,
+                "color": "#48d1cc",
+                "label": "FLAG",
             })
             regions.append({
-                "from": offset + length - 8, "to": offset + length,
-                "color": "#48d1cc", "label": "FLAG",
+                "from": offset + length - 8,
+                "to": offset + length,
+                "color": "#48d1cc",
+                "label": "FLAG",
             })
         offset += length
     return regions
@@ -319,7 +325,8 @@ def render_scope(run: RunResult, config: SimulationConfig) -> None:
     ]
     height = _TRACE_HEIGHT * len(traces)
     html = (
-        _SCOPE_HTML.replace("__PAYLOAD__", json.dumps({"traces": traces}))
+        _SCOPE_HTML
+        .replace("__PAYLOAD__", json.dumps({"traces": traces}))
         .replace("__HEIGHT__", str(height))
         .replace("__WIN0__", "12")
     )
@@ -414,7 +421,7 @@ def render_link_layer(run: RunResult, config: SimulationConfig) -> None:
 def main() -> None:
     """Compose the page."""
     st.set_page_config(page_title="TR1 Simulator", layout="wide")
-    st.title("TR1 — Link + Physical layer simulator")
+    st.title("TR1: Link + Physical layer simulator")
     message, config = sidebar_config()
 
     try:

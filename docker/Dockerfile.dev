@@ -31,7 +31,5 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && rm -rf /var/lib/apt/lists/* \
     && corepack enable \
     && corepack prepare pnpm@latest --activate
-# Install claude
-RUN npm install -g @anthropic-ai/claude-code
 
 WORKDIR /workspace
